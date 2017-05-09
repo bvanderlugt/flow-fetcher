@@ -8,7 +8,7 @@ var request = require('request')
 
 var scrapeRiverRows = function($, callback) {
   var data = []
-  var detail = {} // used for detail page elements
+  // var detail = {} // used for detail page elements
   // $ is a cheerio object, callback takes the returned data as a JSON object
   // top level row in river table
   var div = $('.tableledger')
@@ -24,23 +24,8 @@ var scrapeRiverRows = function($, callback) {
 
   $(rowsValid).each(function(i, el) {
     var tableColumns = $(el).children()
-
     // console.log('trying to get to detial page link: ' + 'professorpaddle.com/rivers/' + $(tableColumns).eq(1).find('a').attr('href'))
-
     var detailPageLink = 'http://professorpaddle.com/rivers/' + $(tableColumns).eq(1).find('a').attr('href')
-
-    request(detailPageLink, function(err, res, html) {
-      // console.log('inside request for detail')
-      if (err) {
-        console.log('error detail page link request: ', err)
-      } else if (res.statusCode !== 200) {
-        console.log('status code not 200: ' + res.statusCode)
-      }
-      else {
-        var detailScraper = cheerio.load(html)
-        detail = scrapeDetailPage(detailScraper)
-      }
-    })
 
     var row = {
       riverName: $(tableColumns).eq(0).find('font').text(),
@@ -50,18 +35,44 @@ var scrapeRiverRows = function($, callback) {
         level: $(tableColumns).eq(3).find('font').find('strong').text()
       },
       lastUpdate: $(tableColumns).eq(4).find('font').text(),
-      detailPageURL: detailPageLink
+      detailPageURL: detailPageLink,
     }
-
     data.push(row)
   })
-  return data
+
+  let riverRowPromiseArr = data.map(function(riverRow) {
+      return new Promise(function(resolve, reject) {
+        // console.log('inside new Promise map, ', riverRow['detailPageURL'])
+        request(riverRow['detailPageURL'], function(err, res, html) {
+          console.log('inside request for detail')
+          if (err) {
+            console.log('error detail page link request: ', err)
+            return reject(err)
+          }
+          // if resolves then send res to body to detail scraper
+          console.log('making promises I guess?? ')
+          resolve(scrapeDetailPage(cheerio.load(html)))
+        })
+      })
+  })
+
+  Promise.all(riverRowPromiseArr).then(function(detailResArray) {
+    detailResArray.forEach(function(detail) {
+      if (detail.gauge == null) {
+        console.log(detail.gauge, "returned null")
+      } else {
+        console.log(detail)
+      }
+    })
+  }).catch(function(err) {
+    console.log(err)
+  })
 }
 
 var scrapeDetailPage = function($) {
   // if you feed me the river detail page I'll callback with
   // a detail object
-  var data = []
+  // var data = []
 
   var ledgers = $('.tableledger')
 
@@ -83,7 +94,6 @@ var scrapeDetailPage = function($) {
   }
 
   // --- river flow elements ---
-
   var flowText = riverFlowRow.children().eq(0).text().trim().split(/\s{4}/)
   var minVal = Number(flowText[0].match(/\d+/)[0])
   var maxVal = Number(flowText[1].match(/\d+/)[0])
