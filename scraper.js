@@ -5,11 +5,16 @@ var cheerio = require('cheerio')
 var fs = require('fs')
 var request = require('request')
 
-
+/**
+ * var scrapeRiverRows - Get data from the river row page and return an array
+ * with obj for each row
+ *
+ * @param  {cheerio} $      cheerio object
+ * @return {array}          array of riverRow objs
+ */
 var scrapeRiverRows = function($) {
   var data = []
-  // var detail = {} // used for detail page elements
-  // $ is a cheerio object, callback takes the returned data as a JSON object
+
   // top level row in river table
   var div = $('.tableledger')
   // all the other rows in table
@@ -31,51 +36,33 @@ var scrapeRiverRows = function($) {
       riverName: $(tableColumns).eq(0).find('font').text(),
       runName: $(tableColumns).eq(1).find('a').text(),
       classType: $(tableColumns).eq(2).find('font').text(),
-      flow: {
-        level: $(tableColumns).eq(3).find('font').find('strong').text()
-      },
+      flow: $(tableColumns).eq(3).find('font').find('strong').text(),
       lastUpdate: $(tableColumns).eq(4).find('font').text(),
       detailPageURL: detailPageLink,
     }
     data.push(row)
   })
-
-
-  data = data.slice(0, 3)
-  let riverRowPromiseArr = data.map(function(riverRow) {
-      return new Promise(function(resolve, reject) {
-        // console.log('inside new Promise map, ', riverRow['detailPageURL'])
-        request(riverRow['detailPageURL'], function(err, res, html) {
-          console.log('inside request for detail')
-          if (err) {
-            console.log('error detail page link request: ', err)
-            return reject(err)
-          }
-          // if resolves then send res to body to detail scraper
-          console.log('making promises I guess?? ')
-          // resolve(scrapeDetailPage(cheerio.load(html)))
-          console.log('hi')
-          resolve(html)
-        })
-      })
-  })
-
-  Promise.all(riverRowPromiseArr).then(function(detailResArray) {
-    detailResArray.forEach(function(detailHTML, i) {
-      const result = scrapeDetailPage(cheerio.load(detailHTML))
-      data[i].detail = result
-      console.log(data)
-    })
   return data
-  }).catch(function(err) {
-    console.log(err)
-  })
 }
 
+/**
+ * var scrapeDetailPage - takes a cheerio object for detail
+ * river pages and returns detail object
+ *
+ * @param  {cheerio} $ cheerio object
+ * @return {detail}   json object with river detail. Values initialized to 0/nulls
+ */
 var scrapeDetailPage = function($) {
-  // if you feed me the river detail page I'll callback with
-  // a detail object
-  // var data = []
+  // takes a cheerio object for detail river pages and returns detail object
+
+  // initialize to default values
+  var detail = {
+    gauge: null,
+    siteID: null,
+    minFlow: 0,
+    maxFlow: 0,
+    units: null
+  }
 
   var ledgers = $('.tableledger')
 
@@ -83,33 +70,40 @@ var scrapeDetailPage = function($) {
     return $(el).children().hasClass('tablebottomy')
   })
 
+  // need some checks to see what kind of page we have
+  // 1) complete usgs page (guage, min/max)
+  // 2) complete non-usgs page
+  // 3) no gauge / no flow info page (just a description)
+  // we can deal with extracting what we can and returning default values
+  // when data is not present
+
+  // if there is no gauge ledger info, return a default detail obj
+  // console.log('check if ledger exists for gauge' + ledgers.siblings().length)
+  if (ledgers.siblings().length === 0) {
+    return detail
+  }
   // gauge row
   var riverInfoRow = ledgers.next()
   // max/min row
   var riverFlowRow = riverInfoRow.next()
   // console.log(riverInfoRow.children().eq(0).find('a').attr('href'))
 
-  // --- river detail elements ---
+  // --- river info elements ---
+  detail.gauge = riverInfoRow.children().eq(0).find('a').text().trim()
+
   var siteURL = riverInfoRow.children().eq(0).find('a').attr('href')
-  var siteID = 0 // initialize to zero which means no siteid/non-usgs gauge
   if (/(usgs)/.test(siteURL)) { // only pull id if gauge belongs to usgs
-    siteID = siteURL.trim().match(/\d+/) // gets the digits at the end of of the url (site id)
+    detail.siteID = siteURL.trim().match(/\d+/) // gets the digits at the end of of the url (site id)
   }
 
   // --- river flow elements ---
+  // console.log(riverFlowRow)
   var flowText = riverFlowRow.children().eq(0).text().trim().split(/\s{4}/)
-  var minVal = Number(flowText[0].match(/\d+/)[0])
-  var maxVal = Number(flowText[1].match(/\d+/)[0])
-
-  // console.log(flowText[0].match(/\w+$/)[0])
-
-  // --- detail object ---
-  var detail = {
-    gauge: riverInfoRow.children().eq(0).find('a').text().trim(),
-    siteID: siteID,
-    minFlow: minVal,
-    maxFlow: maxVal,
-    units: flowText[0].match(/\w+$/)[0]
+  // console.log(flowText)
+  if (flowText[0] !== '') {
+    detail.minFlow = Number(flowText[0].match(/\d+/)[0])
+    detail.maxFlow = Number(flowText[1].match(/\d+/)[0])
+    detail.units = flowText[0].match(/\w+$/)[0]
   }
   return detail
 }
