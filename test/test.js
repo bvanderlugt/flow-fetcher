@@ -11,11 +11,10 @@ const riverDetail = cheerio.load(fs.readFileSync(__dirname + '/../data/river-det
 
 describe('ScrapeRiverRows', () => {
   // let data = scraper.scrapeRiverRows(riverRows)
-  let data = scraper.scrapeRiverRows(riverRows, scraper.scrapeDetailPage)
+  let data = scraper.scrapeRiverRows(riverRows)
 
-    it('should return river name of first entry', (done) => {
+    it('should return river name of first entry', () => {
       assert.equal('American', data[0]['riverName'])
-      done()
     })
 
 })

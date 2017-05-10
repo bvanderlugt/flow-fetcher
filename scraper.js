@@ -6,7 +6,7 @@ var fs = require('fs')
 var request = require('request')
 
 
-var scrapeRiverRows = function($, callback) {
+var scrapeRiverRows = function($) {
   var data = []
   // var detail = {} // used for detail page elements
   // $ is a cheerio object, callback takes the returned data as a JSON object
@@ -40,6 +40,8 @@ var scrapeRiverRows = function($, callback) {
     data.push(row)
   })
 
+
+  data = data.slice(0, 3)
   let riverRowPromiseArr = data.map(function(riverRow) {
       return new Promise(function(resolve, reject) {
         // console.log('inside new Promise map, ', riverRow['detailPageURL'])
@@ -51,19 +53,20 @@ var scrapeRiverRows = function($, callback) {
           }
           // if resolves then send res to body to detail scraper
           console.log('making promises I guess?? ')
-          resolve(scrapeDetailPage(cheerio.load(html)))
+          // resolve(scrapeDetailPage(cheerio.load(html)))
+          console.log('hi')
+          resolve(html)
         })
       })
   })
 
   Promise.all(riverRowPromiseArr).then(function(detailResArray) {
-    detailResArray.forEach(function(detail) {
-      if (detail.gauge == null) {
-        console.log(detail.gauge, "returned null")
-      } else {
-        console.log(detail)
-      }
+    detailResArray.forEach(function(detailHTML, i) {
+      const result = scrapeDetailPage(cheerio.load(detailHTML))
+      data[i].detail = result
+      console.log(data)
     })
+  return data
   }).catch(function(err) {
     console.log(err)
   })
@@ -108,7 +111,6 @@ var scrapeDetailPage = function($) {
     maxFlow: maxVal,
     units: flowText[0].match(/\w+$/)[0]
   }
-
   return detail
 }
 
